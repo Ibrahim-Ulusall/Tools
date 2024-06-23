@@ -7,11 +7,14 @@ using Microsoft.Extensions.Logging;
 using MQTTnet;
 using MQTTnet.Adapter;
 using MQTTnet.Client;
+using MQTTnet.Packets;
+using MQTTnet.Protocol;
 using Polly;
 using System.Net.Sockets;
+using System.Text;
 
 namespace Applications.Mqtt.MqttNET;
-public class MqttService : IMqttService, IDisposable
+public abstract class MqttService : IMqttService, IDisposable
 {
     private object _lock = new object();
     private readonly MqttConnectionModel connection;
@@ -57,15 +60,79 @@ public class MqttService : IMqttService, IDisposable
 
     }
 
-    private Task DisconnectedAsync(MqttClientDisconnectedEventArgs arg)
+    public async Task<bool> PublishAsync(MqttRequestModel request)
     {
-        logger.LogWarning(WarningMessage.MqttConnectionDisconnected);
-        return Task.CompletedTask;
+        MqttApplicationMessage message = new()
+        {
+            Topic = request.Topic,
+            PayloadSegment = Encoding.UTF8.GetBytes(request.Payload),
+            QualityOfServiceLevel = MqttQualityOfServiceLevel.AtLeastOnce,
+        };
+        
+        await mqttClient.PublishAsync(message);
+        return true;
     }
 
+    public async Task<bool> PublishAsync(ICollection<MqttRequestModel> requests)
+    {
+        foreach (var request in requests)
+            await PublishAsync(request);
+        return true;
+    }
+
+    public async Task<bool> SubscribeAsync(string topic)
+    {
+        await mqttClient.SubscribeAsync(topic);
+        return true;
+    }
+    public async Task<bool> SubscribeAsync(ICollection<string> topics)
+    {
+        List<MqttTopicFilter> topicFilters = new List<MqttTopicFilter>();
+        foreach (var topic in topics)
+        {
+            topicFilters.Add(new MqttTopicFilter()
+            {
+                Topic = topic,
+                QualityOfServiceLevel = MqttQualityOfServiceLevel.AtLeastOnce
+            });
+        }
+
+        MqttClientSubscribeOptions subscribeOption = new MqttClientSubscribeOptions()
+        {
+            TopicFilters = topicFilters,
+        };
+        await mqttClient.SubscribeAsync(subscribeOption);
+        return true;
+    }
+
+    public void ListenMqttMessage(Func<MqttApplicationMessageReceivedEventArgs, Task> handler)
+    {
+        mqttClient.ApplicationMessageReceivedAsync += async (e) =>
+        {
+            try
+            {
+                await handler(e);
+            }
+            catch (Exception ex)
+            {
+                logger.LogError($"Hata oluştu: {ex.Message}");
+            }
+        };
+    }
+
+    protected virtual void HandleApplicationMessage(MqttApplicationMessageReceivedEventArgs e)
+    {
+        
+    }
     private Task ConnectedAsync(MqttClientConnectedEventArgs arg)
     {
         logger.LogInformation(SuccessMessage.MqttConnectionSuccessfully);
+        return Task.CompletedTask;
+    }
+
+    private Task DisconnectedAsync(MqttClientDisconnectedEventArgs arg)
+    {
+        logger.LogWarning(WarningMessage.MqttConnectionDisconnected);
         return Task.CompletedTask;
     }
 

@@ -18,4 +18,7 @@ public static class ErrorMessage
     public const string SignalRConnectionNotFound = $"appsettings.json dosyası içerisinde {nameof(Sections.SignalR)} adında bir alan bulunamadı";
     public const string SignalRConnectionFail = "SignalR Bağlantısı kurulamadı.";
     public const string SignalRConnectionException = "SignalR Bağlantısı kurulurken hata meydana geldi.";
+
+    public const string PathNotFound = "Dizin Bulunamadı.";
+    public const string FileNotFound = "Dosya Bulunamadı.";
 }
